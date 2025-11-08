@@ -1,6 +1,13 @@
-CONNECTION_URI = "postgresql://postgres.ayvkfoagfgnbwglrgznq:[ZzSM7AokYzx7q8Bd]@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
-CONNECTION_URI = "postgresql://postgres:[ZzSM7AokYzx7q8Bd]@db.ayvkfoagfgnbwglrgznq.supabase.co:5432/postgres"
-CONNECTION_URI = "postgresql://postgres.ayvkfoagfgnbwglrgznq:[ZzSM7AokYzx7q8Bd]@aws-1-us-east-2.pooler.supabase.com:5432/postgres"
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
+
+CONNECTION_URI = f"postgresql://postgres.ayvkfoagfgnbwglrgznq:[{DATABASE_PASSWORD}]@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+CONNECTION_URI = f"postgresql://postgres:[{DATABASE_PASSWORD}]@db.ayvkfoagfgnbwglrgznq.supabase.co:5432/postgres"
+CONNECTION_URI = f"postgresql://postgres.ayvkfoagfgnbwglrgznq:[{DATABASE_PASSWORD}]@aws-1-us-east-2.pooler.supabase.com:5432/postgres"
+
 from sqlmodel import SQLModel, Field, select
 from typing import Optional, List
 from sqlmodal import create_engine, Session
