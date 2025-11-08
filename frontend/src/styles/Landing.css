@@ -1,0 +1,12 @@
+/* Import component styles */
+@import '../components/Navbar.css';
+@import '../components/Hero.css';
+@import '../components/Features.css';
+@import '../components/CTA.css';
+@import '../components/Footer.css';
+
+/* Landing page container */
+.landing-container {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
