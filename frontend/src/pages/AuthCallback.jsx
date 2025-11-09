@@ -44,8 +44,7 @@ function AuthCallback() {
       <div className="auth-card">
         <div className="auth-header">
           <div className="logo">
-            <span className="logo-icon">👁️</span>
-            <span className="logo-text">Watcher</span>
+            <span className="logo-text">The Watcher</span>
           </div>
           {loading ? (
             <>

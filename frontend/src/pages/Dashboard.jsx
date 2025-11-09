@@ -109,8 +109,7 @@ function Dashboard() {
       <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-header">
           <div className="logo" onClick={() => navigate('/')}>
-            <span className="logo-icon">👁️</span>
-            {isSidebarOpen && <span className="logo-text">Watcher</span>}
+            {isSidebarOpen && <span className="logo-text">The Watcher</span>}
           </div>
           <button 
             className="sidebar-toggle"

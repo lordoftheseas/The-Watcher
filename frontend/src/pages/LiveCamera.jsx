@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
 import { sendThreatEmail, isEmailConfigured } from '../services/emailService'
+import { generateReport, saveReportToLocal } from '../services/reportService'
 import '../styles/LiveCamera.css'
 import professorImage from '../assets/professor.jpg'
 
@@ -25,6 +25,7 @@ function LiveCamera() {
     recommendedAction: 'Monitoring...',
     averageConfidence: 0
   })
+  const [demoEmailSent, setDemoEmailSent] = useState(false) // Track if demo email sent
   const analysisIntervalRef = useRef(null)
 
   // Load saved detections from localStorage on mount
@@ -94,69 +95,28 @@ function LiveCamera() {
     try {
       setIsLoadingHistory(true)
       
-      // Get current session
-      const { data: { session } } = await supabase.auth.getSession()
+      // Load reports from localStorage instead of database
+      const { getLocalReports } = await import('../services/reportService')
+      const localReports = getLocalReports()
       
-      if (!session) {
-        console.log('No session found')
-        return
-      }
-
-      const response = await fetch(`${API_URL}/api/threat-detections?auth_token=${session.access_token}&limit=50`)
+      // Convert reports to threat history format
+      const threats = localReports
+        .filter(r => r.threatLevel === 'warning' || r.threatLevel === 'danger')
+        .map(r => ({
+          id: r.id,
+          timestamp: r.timestamp,
+          threat_level: r.threatLevel,
+          description: r.description,
+          confidence: r.confidence,
+          details: r.details,
+          camera_name: r.cameraName
+        }))
       
-      if (!response.ok) {
-        throw new Error('Failed to load threat history')
-      }
-
-      const result = await response.json()
-      
-      if (result.success) {
-        setThreatHistory(result.detections || [])
-      }
+      setThreatHistory(threats)
     } catch (err) {
       console.error('Error loading threat history:', err)
     } finally {
       setIsLoadingHistory(false)
-    }
-  }
-
-  const saveThreatToDatabase = async (analysis) => {
-    try {
-      // Save ALL detections (safe, warning, danger) with confidence >= 0.5
-      if (analysis.confidence >= 0.5) {
-        
-        // Get current session
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        if (!session) {
-          console.log('No session, skipping database save')
-          return
-        }
-
-        // The analysis now includes image_data captured by Gemini
-        const response = await fetch(`${API_URL}/api/threat-detections`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            auth_token: session.access_token,
-            camera_name: 'Live Camera',
-            detection: analysis,  // This includes image_data from Gemini
-            image_url: null  // Optional: for external storage URLs
-          })
-        })
-
-        if (response.ok) {
-          const result = await response.json()
-          console.log('✅ Detection saved to database:', result)
-          
-          // Reload history to show new detection
-          await loadThreatHistory()
-        }
-      }
-    } catch (err) {
-      console.error('Error saving detection to database:', err)
     }
   }
 
@@ -221,10 +181,10 @@ function LiveCamera() {
           readableDetails.push(`Action: ${analysis.recommended_action}`)
         }
 
-        // Add detection to local log with readable text
+        // Add detection to local log - SHOW PLAIN DESCRIPTION ONLY
         const newDetection = {
           id: Date.now(),
-          text: analysis.description || 'Analysis completed',
+          text: analysis.description || 'Analysis completed', // Plain text description
           time: new Date().toLocaleTimeString(),
           timestamp: new Date().toISOString(),
           threatLevel: analysis.threat_level,
@@ -244,18 +204,62 @@ function LiveCamera() {
           averageConfidence: analysis.confidence || 0
         })
 
-        // Save ALL detections to database (snapshot already captured by Gemini)
-        await saveThreatToDatabase(analysis)
-
-        // Send email notification for warning and danger threats
+        // Generate and save report LOCALLY for warning/danger threats
         if (analysis.threat_level === 'warning' || analysis.threat_level === 'danger') {
-          if (isEmailConfigured()) {
+          const report = generateReport(analysis)
+          const saveResult = saveReportToLocal(report)
+          
+          if (saveResult.success) {
+            console.log('✅ Report generated and saved locally:', report.id)
+            setDetections(prev => [{
+              id: Date.now() + 1,
+              text: `📄 Report generated: ${report.id}`,
+              time: new Date().toLocaleTimeString(),
+              threatLevel: 'safe',
+              confidence: 1.0
+            }, ...prev].slice(0, 10))
+          }
+        }
+
+        // DEMO: Send email on FIRST detection (any threat level)
+        if (!demoEmailSent && isEmailConfigured()) {
+          console.log('📧 DEMO: Sending first detection email...')
+          setDemoEmailSent(true) // Mark as sent so we don't send again
+          
+          try {
+            const emailResult = await sendThreatEmail(analysis)
+            if (emailResult.success) {
+              console.log('✅ Demo email sent successfully!')
+              setDetections(prev => [{
+                id: Date.now() + 1,
+                text: '📧 Demo email sent successfully!',
+                time: new Date().toLocaleTimeString(),
+                threatLevel: 'safe',
+                confidence: 1.0
+              }, ...prev].slice(0, 10))
+            } else {
+              console.error('❌ Failed to send demo email:', emailResult.error || emailResult.message)
+              setDetections(prev => [{
+                id: Date.now() + 1,
+                text: `⚠️ Demo email failed: ${emailResult.error || emailResult.message}`,
+                time: new Date().toLocaleTimeString(),
+                threatLevel: 'warning',
+                details: ['Check EmailJS configuration in .env', 'Verify service and template IDs']
+              }, ...prev].slice(0, 10))
+            }
+          } catch (emailError) {
+            console.error('❌ Demo email error:', emailError)
+          }
+        }
+        
+        // Send email notification for warning and danger threats (normal behavior)
+        if (analysis.threat_level === 'warning' || analysis.threat_level === 'danger') {
+          if (isEmailConfigured() && demoEmailSent) { // Only send if demo already sent
             console.log('📧 Attempting to send email for threat level:', analysis.threat_level)
             try {
               const emailResult = await sendThreatEmail(analysis)
               if (emailResult.success) {
                 console.log('✅ Email notification sent successfully')
-                // Optional: Show success notification to user
                 setDetections(prev => [{
                   id: Date.now() + 1,
                   text: '✅ Email alert sent successfully',
@@ -265,7 +269,6 @@ function LiveCamera() {
                 }, ...prev].slice(0, 10))
               } else {
                 console.error('❌ Failed to send email:', emailResult.error || emailResult.message)
-                // Show error in detection log
                 setDetections(prev => [{
                   id: Date.now() + 1,
                   text: `⚠️ Email failed: ${emailResult.error || emailResult.message}`,
@@ -381,17 +384,17 @@ function LiveCamera() {
                     alt="Big Brother" 
                     className="professor-image"
                     style={{
-                      width: '300px',
-                      height: '300px',
+                      width: '180px',
+                      height: '180px',
                       objectFit: 'cover',
                       borderRadius: '50%',
-                      marginBottom: '20px',
-                      border: '4px solid #3b82f6',
-                      boxShadow: '0 0 30px rgba(59, 130, 246, 0.5)'
+                      marginBottom: '15px',
+                      border: '3px solid #3b82f6',
+                      boxShadow: '0 0 20px rgba(59, 130, 246, 0.5)'
                     }}
                   />
-                  <h3 style={{ fontSize: '1.8rem', marginBottom: '10px' }}>Big Brother is Always Watching You</h3>
-                  <p>Click "Start Camera" to begin live monitoring</p>
+                  <h3 style={{ fontSize: '1.4rem', marginBottom: '8px', lineHeight: '1.3' }}>Big Brother is Always Watching You</h3>
+                  <p style={{ fontSize: '0.95rem' }}>Click "Start Camera" to begin live monitoring</p>
                 </div>
               </div>
             )}

@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { getLocalReports, generateDummyReport, exportReportsToJSON, clearAllReports } from '../services/reportService'
 import '../styles/Reports.css'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function Reports() {
   const [selectedReport, setSelectedReport] = useState(null)
@@ -11,7 +9,7 @@ function Reports() {
   const [reports, setReports] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Load reports from database
+  // Load reports from localStorage
   useEffect(() => {
     loadReports()
   }, [])
@@ -20,64 +18,56 @@ function Reports() {
     try {
       setIsLoading(true)
       
-      // Get current session
-      const { data: { session } } = await supabase.auth.getSession()
+      // Load reports from localStorage
+      const localReports = getLocalReports()
       
-      if (!session) {
-        console.log('No session found')
-        setReports([])
-        return
-      }
-
-      const response = await fetch(`${API_URL}/api/threat-detections?auth_token=${session.access_token}&limit=100`)
-      
-      if (!response.ok) {
-        throw new Error('Failed to load reports')
-      }
-
-      const result = await response.json()
-      
-      if (result.success && result.detections) {
-        // Transform database detections to report format
-        const transformedReports = result.detections.map((detection, index) => {
-          // Determine icon based on threat level
-          let icon = '✓'
-          if (detection.threat_level === 'danger') icon = '🚨'
-          else if (detection.threat_level === 'warning') icon = '⚠️'
-          
-          // Parse details to extract structured information
-          const details = Array.isArray(detection.details) ? detection.details : []
-          const objectsLine = details.find(d => d.startsWith('Objects detected:'))
-          const peopleLine = details.find(d => d.startsWith('People count:'))
-          const actionLine = details.find(d => d.startsWith('Recommended action:'))
-          
-          return {
-            id: detection.id,
-            title: `${icon} ${detection.description.substring(0, 50)}...`,
-            date: new Date(detection.timestamp).toISOString().split('T')[0],
-            time: new Date(detection.timestamp).toLocaleTimeString(),
-            location: detection.camera_name || 'Live Camera',
-            cameraId: detection.camera_name || 'Live Camera',
-            threatLevel: detection.threat_level,
-            status: detection.reviewed ? 'resolved' : 'under-review',
-            description: detection.description,
-            detections: details,
-            duration: 'Live detection',
-            assignedTo: 'Security Team',
-            priority: detection.threat_level === 'danger' ? 'high' : 
-                     detection.threat_level === 'warning' ? 'medium' : 'low',
-            confidence: detection.confidence,
-            reportId: detection.report_id || `#${detection.id}`,
-            timestamp: detection.timestamp,
-            imageData: detection.image_data,
-            imageUrl: detection.image_url
-          }
-        })
+      // Transform to display format
+      const transformedReports = localReports.map((report) => {
+        // Determine icon based on threat level
+        let icon = '✓'
+        if (report.threatLevel === 'danger') icon = '🚨'
+        else if (report.threatLevel === 'warning') icon = '⚠️'
         
-        setReports(transformedReports)
-      } else {
-        setReports([])
-      }
+        // Format details array
+        const detailsArray = []
+        if (report.objectsDetected && report.objectsDetected.length > 0) {
+          detailsArray.push(`Objects: ${report.objectsDetected.join(', ')}`)
+        }
+        if (report.peopleCount !== undefined) {
+          detailsArray.push(`People count: ${report.peopleCount}`)
+        }
+        if (report.recommendedAction) {
+          detailsArray.push(`Action: ${report.recommendedAction}`)
+        }
+        if (report.details && Array.isArray(report.details)) {
+          detailsArray.push(...report.details)
+        }
+        
+        return {
+          id: report.id,
+          title: `${icon} ${report.description.substring(0, 50)}...`,
+          date: report.date,
+          time: report.time,
+          location: report.cameraName,
+          cameraId: report.cameraId,
+          threatLevel: report.threatLevel,
+          status: report.status,
+          description: report.description,
+          detections: detailsArray,
+          duration: 'Live detection',
+          assignedTo: 'Security Team',
+          priority: report.priority,
+          confidence: report.confidence,
+          reportId: report.id,
+          timestamp: report.timestamp,
+          imageData: report.imageData,
+          objectsDetected: report.objectsDetected,
+          peopleCount: report.peopleCount,
+          recommendedAction: report.recommendedAction
+        }
+      })
+      
+      setReports(transformedReports)
     } catch (err) {
       console.error('Error loading reports:', err)
       setReports([])
@@ -122,6 +112,28 @@ function Reports() {
     return colors[priority]
   }
 
+  const handleGenerateDummyReport = () => {
+    const result = generateDummyReport()
+    if (result.success) {
+      alert('✅ Dummy report generated successfully!')
+      loadReports() // Reload to show new report
+    }
+  }
+
+  const handleExportReports = () => {
+    exportReportsToJSON()
+    alert('✅ Reports exported to JSON file!')
+  }
+
+  const handleClearReports = () => {
+    if (confirm('Are you sure you want to delete all reports? This cannot be undone.')) {
+      clearAllReports()
+      setReports([])
+      setSelectedReport(null)
+      alert('✅ All reports cleared!')
+    }
+  }
+
   return (
     <div className="reports-container">
       {isLoading && (
@@ -129,6 +141,52 @@ function Reports() {
           <div className="loading-spinner">Loading reports...</div>
         </div>
       )}
+      
+      {/* Action Buttons */}
+      <div style={{ padding: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+        <button 
+          onClick={handleGenerateDummyReport}
+          style={{
+            padding: '8px 16px',
+            background: '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          📄 Generate Dummy Report
+        </button>
+        <button 
+          onClick={handleExportReports}
+          style={{
+            padding: '8px 16px',
+            background: '#10b981',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          💾 Export to JSON
+        </button>
+        <button 
+          onClick={handleClearReports}
+          style={{
+            padding: '8px 16px',
+            background: '#ef4444',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          🗑️ Clear All Reports
+        </button>
+      </div>
       
       {/* Stats Bar */}
       <div className="reports-stats">

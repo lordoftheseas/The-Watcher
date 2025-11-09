@@ -10,7 +10,7 @@ function Landing() {
       <nav className="navbar">
         <div className="nav-content">
           <div className="logo">
-            <span className="logo-text">Watcher</span>
+            <span className="logo-text">The Watcher</span>
           </div>
           <div className="nav-links">
             <button onClick={() => navigate('/login')} className="btn-text">
@@ -213,7 +213,7 @@ function Landing() {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>&copy; 2025 Watcher. All rights reserved.</p>
+          <p>&copy; 2025 The Watcher. All rights reserved.</p>
         </div>
       </footer>
     </div>
