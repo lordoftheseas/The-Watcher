@@ -529,12 +529,12 @@ function LiveCamera() {
             </div>
             
             {/* Gemini AI Metrics */}
-            <div className="compact-stats">
-              <div className="compact-stat-item">
+            {/* <div className="compact-stats"> */}
+              {/* <div className="compact-stat-item">
                 <span className="compact-stat-icon">👁️</span>
                 <span className="compact-stat-value">{geminiMetrics.objectsDetected.length > 0 ? geminiMetrics.objectsDetected.join(', ') : 'None'}</span>
                 <span className="compact-stat-label">Objects Detected</span>
-              </div>
+              </div> */}
               {/* <div className="compact-stat-item">
                 <span className="compact-stat-icon">👥</span>
                 <span className="compact-stat-value">{geminiMetrics.peopleCount}</span>
@@ -545,12 +545,12 @@ function LiveCamera() {
                 <span className="compact-stat-value">{geminiMetrics.recommendedAction}</span>
                 <span className="compact-stat-label">Recommended Action</span>
               </div> */}
-              <div className="compact-stat-item">
+              {/* <div className="compact-stat-item">
                 <span className="compact-stat-icon">🎯</span>
                 <span className="compact-stat-value">{(geminiMetrics.averageConfidence * 100).toFixed(0)}%</span>
-                <span className="compact-stat-label">Confidence</span>
-              </div>
-            </div>
+                <span className="compact-stat-label">Confidence</span> */}
+              {/* </div> */}
+            {/* </div> */}
           </div>
 
           {/* Threat Analysis */}
