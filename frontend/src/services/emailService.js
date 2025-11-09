@@ -12,69 +12,59 @@ if (EMAILJS_PUBLIC_KEY) {
 
 /**
  * Send threat detection email notification
- * @param {Object} threatData - Threat detection data from Gemini API
- * @param {string} threatData.threat_level - Level of threat (safe/warning/danger)
- * @param {string} threatData.description - Description of the threat
- * @param {number} threatData.confidence - Confidence score (0-1)
- * @param {Array} threatData.objects_detected - List of detected objects
- * @param {number} threatData.people_count - Number of people detected
- * @param {string} threatData.recommended_action - Recommended action
- * @param {Array} threatData.details - Additional details
+ * Uses the same data format as report generation (simple and clean)
+ * @param {Object} detection - Threat detection data from Gemini API
+ * @param {string} detection.threat_level - Level of threat (safe/warning/danger)
+ * @param {string} detection.description - Display description of the threat
+ * @param {number} detection.confidence - Confidence score (0-1)
+ * @param {Array} detection.objects_detected - List of detected objects
+ * @param {number} detection.people_count - Number of people detected
+ * @param {string} detection.recommended_action - Recommended action
  * @returns {Promise} EmailJS promise
  */
-export const sendThreatEmail = async (threatData) => {
+export const sendThreatEmail = async (detection) => {
   if (!EMAILJS_PUBLIC_KEY || !EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID) {
     console.warn('EmailJS not configured. Skipping email notification.')
     return { success: false, message: 'EmailJS not configured' }
   }
 
   try {
-    console.log('📧 Raw threat data received:', threatData)
+    console.log('📧 Detection data received for email:', detection)
     
-    // Validate threat data
-    if (!threatData || typeof threatData !== 'object') {
-      console.error('❌ Invalid threat data:', threatData)
-      return { success: false, error: 'Invalid threat data format' }
+    // Validate detection data
+    if (!detection || typeof detection !== 'object') {
+      console.error('❌ Invalid detection data:', detection)
+      return { success: false, error: 'Invalid detection data format' }
     }
 
-    // Format the threat level with appropriate emoji
-    const threatEmoji = {
-      safe: '✅',
-      warning: '⚠️',
-      danger: '🚨'
-    }
+    // Format objects detected (same as report display)
+    const objectsText = Array.isArray(detection.objects_detected) 
+      ? detection.objects_detected.join(', ')
+      : String(detection.objects_detected || 'None')
 
-    // Handle both array and string for details
-    let detailsText = 'No additional details'
-    if (Array.isArray(threatData.details)) {
-      detailsText = threatData.details.join('\n• ')
-    } else if (typeof threatData.details === 'string') {
-      detailsText = threatData.details
-    }
+    // Get the display description (same as what shows in LiveCamera)
+    const description = detection.description || 'No description available'
 
-    // Handle both array and string for objects_detected
-    let objectsText = 'None'
-    if (Array.isArray(threatData.objects_detected)) {
-      objectsText = threatData.objects_detected.join(', ')
-    } else if (typeof threatData.objects_detected === 'string') {
-      objectsText = threatData.objects_detected
-    }
+    // Get recommended action
+    const action = detection.recommended_action || 'Monitor the situation'
 
-    // Prepare email template parameters
+    // Get threat level
+    const threatLevel = (detection.threat_level || 'unknown').toUpperCase()
+
+    // Prepare email template parameters (simple format matching report)
     const templateParams = {
-      threat_level: (threatData.threat_level || 'UNKNOWN').toUpperCase(),
-      threat_emoji: threatEmoji[threatData.threat_level] || '❓',
-      description: threatData.description || 'No description available',
-      confidence: `${((threatData.confidence || 0) * 100).toFixed(1)}%`,
+      // For subject: "Alert: Threat Detected - {description}"
+      description: description,
+      threat_level: threatLevel,
       objects_detected: objectsText,
-      people_count: String(threatData.people_count || 0),
-      recommended_action: threatData.recommended_action || 'Continue monitoring',
-      details: detailsText,
+      people_count: String(detection.people_count || 0),
+      recommended_action: action,
+      confidence: `${Math.round((detection.confidence || 0) * 100)}%`,
       timestamp: new Date().toLocaleString(),
       camera_name: 'Live Camera'
     }
 
-    console.log('📧 Formatted email parameters:', templateParams)
+    console.log('📧 Email template parameters:', templateParams)
 
     // Send email using EmailJS
     const response = await emailjs.send(
