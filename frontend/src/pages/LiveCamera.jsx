@@ -1,42 +1,195 @@
 import { useState, useRef, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import '../styles/LiveCamera.css'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function LiveCamera() {
   const videoRef = useRef(null)
+  const canvasRef = useRef(null)
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState(null)
   const [threatLevel, setThreatLevel] = useState('safe')
-  const [detections, setDetections] = useState([])
+  const [detections, setDetections] = useState([]) // Local state for all detections
+  const [threatHistory, setThreatHistory] = useState([]) // Database history for warnings/danger
   const [isRecording, setIsRecording] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [lastAnalysis, setLastAnalysis] = useState(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const analysisIntervalRef = useRef(null)
 
+  // Load threat history on component mount
   useEffect(() => {
-    // Simulate threat detection updates
-    if (isStreaming) {
-      const interval = setInterval(() => {
-        const levels = ['safe', 'safe', 'safe', 'warning']
-        setThreatLevel(levels[Math.floor(Math.random() * levels.length)])
-        
-        // Simulate detections
-        const possibleDetections = [
-          'Person detected',
-          'Motion in frame',
-          'Face recognized',
-          'Object detected',
-          'No activity'
-        ]
-        setDetections(prev => {
-          const newDetection = {
-            id: Date.now(),
-            text: possibleDetections[Math.floor(Math.random() * possibleDetections.length)],
-            time: new Date().toLocaleTimeString()
-          }
-          return [newDetection, ...prev].slice(0, 10)
-        })
+    loadThreatHistory()
+  }, [])
+
+  // Real-time threat detection using Gemini API
+  useEffect(() => {
+    if (isStreaming && videoRef.current) {
+      // Analyze frames every 3 seconds
+      analysisIntervalRef.current = setInterval(async () => {
+        await analyzeCurrentFrame()
       }, 3000)
 
-      return () => clearInterval(interval)
+      return () => {
+        if (analysisIntervalRef.current) {
+          clearInterval(analysisIntervalRef.current)
+        }
+      }
     }
   }, [isStreaming])
+
+  const loadThreatHistory = async () => {
+    try {
+      setIsLoadingHistory(true)
+      
+      // Get current session
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        console.log('No session found')
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/threat-detections?auth_token=${session.access_token}&limit=50`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to load threat history')
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        setThreatHistory(result.detections || [])
+      }
+    } catch (err) {
+      console.error('Error loading threat history:', err)
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  const saveThreatToDatabase = async (analysis) => {
+    try {
+      // Only save warnings and danger with high confidence
+      if ((analysis.threat_level === 'warning' || analysis.threat_level === 'danger') && 
+          analysis.confidence >= 0.7) {
+        
+        // Get current session
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!session) {
+          console.log('No session, skipping database save')
+          return
+        }
+
+        const response = await fetch(`${API_URL}/api/threat-detections`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            auth_token: session.access_token,
+            camera_name: 'Live Camera',
+            detection: analysis,
+            image_url: null // Could add image upload later
+          })
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('Threat saved to database:', result)
+          
+          // Reload history to show new detection
+          await loadThreatHistory()
+        }
+      }
+    } catch (err) {
+      console.error('Error saving threat to database:', err)
+    }
+  }
+
+  const captureFrame = () => {
+    if (!videoRef.current) return null
+
+    // Create a canvas to capture the current frame
+    const canvas = document.createElement('canvas')
+    canvas.width = videoRef.current.videoWidth
+    canvas.height = videoRef.current.videoHeight
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(videoRef.current, 0, 0)
+
+    return canvas
+  }
+
+  const analyzeCurrentFrame = async () => {
+    if (!videoRef.current || isAnalyzing) return
+
+    try {
+      setIsAnalyzing(true)
+
+      const canvas = captureFrame()
+      if (!canvas) return
+
+      // Convert canvas to blob
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8))
+
+      // Create FormData and send to backend
+      const formData = new FormData()
+      formData.append('file', blob, 'frame.jpg')
+
+      const response = await fetch(`${API_URL}/api/analyze-frame`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze frame')
+      }
+
+      const result = await response.json()
+      
+      if (result.success && result.analysis) {
+        const analysis = result.analysis
+        setLastAnalysis(analysis)
+
+        // Update threat level
+        setThreatLevel(analysis.threat_level || 'safe')
+
+        // Add detection to local log
+        const newDetection = {
+          id: Date.now(),
+          text: analysis.description || 'Analysis completed',
+          time: new Date().toLocaleTimeString(),
+          timestamp: new Date().toISOString(),
+          threatLevel: analysis.threat_level,
+          confidence: analysis.confidence,
+          details: analysis.details || []
+        }
+
+        setDetections(prev => [newDetection, ...prev].slice(0, 10))
+
+        // Save to database if it's a significant threat
+        await saveThreatToDatabase(analysis)
+
+        // Log to console for debugging
+        console.log('Threat Analysis:', analysis)
+      }
+
+    } catch (err) {
+      console.error('Error analyzing frame:', err)
+      // Add error to detection log
+      setDetections(prev => [{
+        id: Date.now(),
+        text: 'Analysis error - continuing monitoring',
+        time: new Date().toLocaleTimeString(),
+        threatLevel: 'safe'
+      }, ...prev].slice(0, 10))
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
 
   const startCamera = async () => {
     try {
@@ -269,21 +422,92 @@ function LiveCamera() {
 
           {/* Detection Log */}
           <div className="info-card detection-log">
-            <h3>Detection Log</h3>
-            <div className="log-list">
-              {detections.length === 0 ? (
-                <div className="log-empty">
-                  <span>No detections yet</span>
-                </div>
-              ) : (
-                detections.map(detection => (
-                  <div key={detection.id} className="log-item">
-                    <span className="log-time">{detection.time}</span>
-                    <span className="log-text">{detection.text}</span>
-                  </div>
-                ))
-              )}
+            <div className="log-header-tabs">
+              <h3 
+                className={!showHistory ? 'active' : ''}
+                onClick={() => setShowHistory(false)}
+              >
+                Live Log {isAnalyzing && <span className="analyzing-badge">🔍</span>}
+              </h3>
+              <h3 
+                className={showHistory ? 'active' : ''}
+                onClick={() => setShowHistory(true)}
+              >
+                History ({threatHistory.length})
+              </h3>
             </div>
+
+            {!showHistory ? (
+              /* Live Detection Log */
+              <div className="log-list">
+                {detections.length === 0 ? (
+                  <div className="log-empty">
+                    <span>No detections yet</span>
+                    {isStreaming && <span className="log-hint">Starting analysis...</span>}
+                  </div>
+                ) : (
+                  detections.map(detection => (
+                    <div key={detection.id} className={`log-item ${detection.threatLevel}`}>
+                      <div className="log-header">
+                        <span className="log-time">{detection.time}</span>
+                        {detection.confidence && (
+                          <span className="log-confidence">
+                            {Math.round(detection.confidence * 100)}%
+                          </span>
+                        )}
+                      </div>
+                      <span className="log-text">{detection.text}</span>
+                      {detection.details && detection.details.length > 0 && (
+                        <div className="log-details">
+                          {detection.details.map((detail, idx) => (
+                            <span key={idx} className="detail-item">• {detail}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              /* Threat History from Database */
+              <div className="log-list">
+                {isLoadingHistory ? (
+                  <div className="log-empty">
+                    <span>Loading history...</span>
+                  </div>
+                ) : threatHistory.length === 0 ? (
+                  <div className="log-empty">
+                    <span>No threat history</span>
+                    <span className="log-hint">Warnings and danger detections appear here</span>
+                  </div>
+                ) : (
+                  threatHistory.map((threat, index) => (
+                    <div key={threat.id || index} className={`log-item ${threat.threat_level}`}>
+                      <div className="log-header">
+                        <span className="log-time">
+                          {new Date(threat.timestamp).toLocaleString()}
+                        </span>
+                        <span className="log-confidence">
+                          {Math.round(threat.confidence * 100)}%
+                        </span>
+                      </div>
+                      <div className="log-threat-badge">
+                        {threat.threat_level === 'danger' ? '🚨' : '⚠️'} {threat.threat_level.toUpperCase()}
+                      </div>
+                      <span className="log-text">{threat.description}</span>
+                      {threat.details && threat.details.length > 0 && (
+                        <div className="log-details">
+                          {threat.details.map((detail, idx) => (
+                            <span key={idx} className="detail-item">• {detail}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="log-camera-name">📹 {threat.camera_name}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick Actions */}

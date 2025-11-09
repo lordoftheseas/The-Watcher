@@ -4,7 +4,7 @@ import '../styles/CCTVGrid.css'
 function CCTVGrid() {
   // Hardcoded CCTV data for 36 cameras (6x6 grid)
   const [cameras] = useState(() => {
-    return Array.from({ length: 36 }, (_, index) => ({
+    return Array.from({ length: 6 }, (_, index) => ({
       id: index + 1,
       name: `Camera ${index + 1}`,
       location: [

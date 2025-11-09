@@ -389,6 +389,136 @@
   color: var(--text-primary);
 }
 
+/* Enhanced detection log styles */
+.log-header-tabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.log-header-tabs h3 {
+  flex: 1;
+  text-align: center;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 3px solid transparent;
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.log-header-tabs h3.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 600;
+}
+
+.log-header-tabs h3:hover {
+  background: var(--surface);
+}
+
+.analyzing-badge {
+  font-size: 0.75rem;
+  color: var(--primary-color);
+  font-weight: normal;
+  margin-left: 0.5rem;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.log-empty .log-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+.log-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border-left: 3px solid var(--border);
+  transition: all 0.2s;
+}
+
+.log-item.safe {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.log-item.warning {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.log-item.danger {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.log-confidence {
+  font-size: 0.7rem;
+  color: var(--primary-color);
+  font-weight: 700;
+  background: rgba(37, 99, 235, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.log-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  padding-left: 0.5rem;
+}
+
+.detail-item {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.log-threat-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  display: inline-block;
+  margin: 0.25rem 0;
+}
+
+.log-item.warning .log-threat-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.log-item.danger .log-threat-badge {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.log-camera-name {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
 /* Action Buttons */
 .action-buttons {
   display: flex;
