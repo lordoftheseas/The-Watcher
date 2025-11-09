@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { sendThreatEmail, isEmailConfigured } from '../services/emailService'
 import '../styles/LiveCamera.css'
+import professorImage from '../assets/professor.jpg'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -208,7 +209,19 @@ function LiveCamera() {
         // Update threat level
         setThreatLevel(analysis.threat_level || 'safe')
 
-        // Add detection to local log
+        // Build human-readable details from JSON data
+        const readableDetails = []
+        if (analysis.objects_detected && analysis.objects_detected.length > 0) {
+          readableDetails.push(`Objects: ${analysis.objects_detected.join(', ')}`)
+        }
+        if (analysis.people_count !== undefined) {
+          readableDetails.push(`People count: ${analysis.people_count}`)
+        }
+        if (analysis.recommended_action) {
+          readableDetails.push(`Action: ${analysis.recommended_action}`)
+        }
+
+        // Add detection to local log with readable text
         const newDetection = {
           id: Date.now(),
           text: analysis.description || 'Analysis completed',
@@ -216,7 +229,9 @@ function LiveCamera() {
           timestamp: new Date().toISOString(),
           threatLevel: analysis.threat_level,
           confidence: analysis.confidence,
-          details: analysis.details || []
+          details: readableDetails,
+          // Keep raw JSON data for report generation
+          rawData: analysis
         }
 
         setDetections(prev => [newDetection, ...prev].slice(0, 10))
@@ -235,14 +250,35 @@ function LiveCamera() {
         // Send email notification for warning and danger threats
         if (analysis.threat_level === 'warning' || analysis.threat_level === 'danger') {
           if (isEmailConfigured()) {
-            const emailResult = await sendThreatEmail(analysis)
-            if (emailResult.success) {
-              console.log('📧 Email notification sent for threat:', analysis.threat_level)
-            } else {
-              console.error('Failed to send email notification:', emailResult.error)
+            console.log('📧 Attempting to send email for threat level:', analysis.threat_level)
+            try {
+              const emailResult = await sendThreatEmail(analysis)
+              if (emailResult.success) {
+                console.log('✅ Email notification sent successfully')
+                // Optional: Show success notification to user
+                setDetections(prev => [{
+                  id: Date.now() + 1,
+                  text: '✅ Email alert sent successfully',
+                  time: new Date().toLocaleTimeString(),
+                  threatLevel: 'safe',
+                  confidence: 1.0
+                }, ...prev].slice(0, 10))
+              } else {
+                console.error('❌ Failed to send email:', emailResult.error || emailResult.message)
+                // Show error in detection log
+                setDetections(prev => [{
+                  id: Date.now() + 1,
+                  text: `⚠️ Email failed: ${emailResult.error || emailResult.message}`,
+                  time: new Date().toLocaleTimeString(),
+                  threatLevel: 'warning',
+                  details: ['Check EmailJS configuration in .env', 'Verify service and template IDs']
+                }, ...prev].slice(0, 10))
+              }
+            } catch (emailError) {
+              console.error('❌ Email error:', emailError)
             }
           } else {
-            console.warn('Email notifications not configured. Set VITE_EMAILJS_* variables in .env')
+            console.warn('⚠️ EmailJS not configured. Set VITE_EMAILJS_* variables in .env')
           }
         }
 
@@ -252,12 +288,20 @@ function LiveCamera() {
 
     } catch (err) {
       console.error('Error analyzing frame:', err)
-      // Add error to detection log
+      // Add error to detection log with more details
+      const errorMessage = err.message || 'Unknown error'
+      const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('Failed to analyze')
+      
       setDetections(prev => [{
         id: Date.now(),
-        text: 'Analysis error - continuing monitoring',
+        text: isNetworkError 
+          ? '⚠️ Cannot reach backend server - is it running on port 8000?' 
+          : `Analysis error: ${errorMessage}`,
         time: new Date().toLocaleTimeString(),
-        threatLevel: 'safe'
+        threatLevel: 'safe',
+        details: isNetworkError 
+          ? ['Check backend server is running', 'Run: cd backend && python3.13 -m uvicorn main:app --reload']
+          : [errorMessage]
       }, ...prev].slice(0, 10))
     } finally {
       setIsAnalyzing(false)
@@ -332,8 +376,21 @@ function LiveCamera() {
             {!isStreaming && !error && (
               <div className="video-placeholder">
                 <div className="placeholder-content">
-                  <span className="placeholder-icon">📹</span>
-                  <h3>Camera Not Active</h3>
+                  <img 
+                    src={professorImage} 
+                    alt="Big Brother" 
+                    className="professor-image"
+                    style={{
+                      width: '300px',
+                      height: '300px',
+                      objectFit: 'cover',
+                      borderRadius: '50%',
+                      marginBottom: '20px',
+                      border: '4px solid #3b82f6',
+                      boxShadow: '0 0 30px rgba(59, 130, 246, 0.5)'
+                    }}
+                  />
+                  <h3 style={{ fontSize: '1.8rem', marginBottom: '10px' }}>Big Brother is Always Watching You</h3>
                   <p>Click "Start Camera" to begin live monitoring</p>
                 </div>
               </div>
@@ -462,16 +519,16 @@ function LiveCamera() {
                 <span className="compact-stat-value">{geminiMetrics.objectsDetected.length > 0 ? geminiMetrics.objectsDetected.join(', ') : 'None'}</span>
                 <span className="compact-stat-label">Objects Detected</span>
               </div>
-              <div className="compact-stat-item">
+              {/* <div className="compact-stat-item">
                 <span className="compact-stat-icon">👥</span>
                 <span className="compact-stat-value">{geminiMetrics.peopleCount}</span>
                 <span className="compact-stat-label">People Count</span>
-              </div>
-              <div className="compact-stat-item">
+              </div> */}
+              {/* <div className="compact-stat-item">
                 <span className="compact-stat-icon">⚡</span>
                 <span className="compact-stat-value">{geminiMetrics.recommendedAction}</span>
                 <span className="compact-stat-label">Recommended Action</span>
-              </div>
+              </div> */}
               <div className="compact-stat-item">
                 <span className="compact-stat-icon">🎯</span>
                 <span className="compact-stat-value">{(geminiMetrics.averageConfidence * 100).toFixed(0)}%</span>

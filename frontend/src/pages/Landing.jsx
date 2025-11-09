@@ -10,7 +10,6 @@ function Landing() {
       <nav className="navbar">
         <div className="nav-content">
           <div className="logo">
-            <span className="logo-icon">👁️</span>
             <span className="logo-text">Watcher</span>
           </div>
           <div className="nav-links">

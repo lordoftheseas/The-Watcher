@@ -24,8 +24,8 @@ function Reports() {
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
-        console.log('No session found, showing demo data')
-        loadDemoReports()
+        console.log('No session found')
+        setReports([])
         return
       }
 
@@ -45,6 +45,12 @@ function Reports() {
           if (detection.threat_level === 'danger') icon = '🚨'
           else if (detection.threat_level === 'warning') icon = '⚠️'
           
+          // Parse details to extract structured information
+          const details = Array.isArray(detection.details) ? detection.details : []
+          const objectsLine = details.find(d => d.startsWith('Objects detected:'))
+          const peopleLine = details.find(d => d.startsWith('People count:'))
+          const actionLine = details.find(d => d.startsWith('Recommended action:'))
+          
           return {
             id: detection.id,
             title: `${icon} ${detection.description.substring(0, 50)}...`,
@@ -55,155 +61,29 @@ function Reports() {
             threatLevel: detection.threat_level,
             status: detection.reviewed ? 'resolved' : 'under-review',
             description: detection.description,
-            detections: Array.isArray(detection.details) ? detection.details : [],
-            duration: 'N/A',
+            detections: details,
+            duration: 'Live detection',
             assignedTo: 'Security Team',
             priority: detection.threat_level === 'danger' ? 'high' : 
                      detection.threat_level === 'warning' ? 'medium' : 'low',
             confidence: detection.confidence,
-            reportId: detection.report_id,
+            reportId: detection.report_id || `#${detection.id}`,
             timestamp: detection.timestamp,
-            imageData: detection.image_data,  // Add image data
-            imageUrl: detection.image_url      // Keep image URL if using external storage
+            imageData: detection.image_data,
+            imageUrl: detection.image_url
           }
         })
         
         setReports(transformedReports)
       } else {
-        loadDemoReports()
+        setReports([])
       }
     } catch (err) {
       console.error('Error loading reports:', err)
-      loadDemoReports()
+      setReports([])
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const loadDemoReports = () => {
-    // Fallback to demo data
-    setReports([
-    {
-      id: 1,
-      title: 'Suspicious Activity - Main Entrance',
-      date: '2025-11-08',
-      time: '14:30:00',
-      location: 'Main Entrance',
-      cameraId: 'Camera 1',
-      threatLevel: 'warning',
-      status: 'under-review',
-      description: 'Unidentified individual loitering near entrance for extended period. No hostile actions observed.',
-      detections: ['Person detected', 'Loitering behavior', 'Face not recognized'],
-      duration: '15 minutes',
-      assignedTo: 'Security Team A',
-      priority: 'medium'
-    },
-    {
-      id: 2,
-      title: 'Unauthorized Access Attempt - Parking Lot',
-      date: '2025-11-08',
-      time: '02:15:00',
-      location: 'Parking Lot',
-      cameraId: 'Camera 2',
-      threatLevel: 'danger',
-      status: 'resolved',
-      description: 'Individual attempted to access restricted parking area without proper credentials. Security responded and subject was escorted out.',
-      detections: ['Unauthorized access', 'Security breach', 'Multiple persons'],
-      duration: '8 minutes',
-      assignedTo: 'Security Team B',
-      priority: 'high'
-    },
-    {
-      id: 3,
-      title: 'Routine Check - Lobby',
-      date: '2025-11-08',
-      time: '10:00:00',
-      location: 'Lobby',
-      cameraId: 'Camera 3',
-      threatLevel: 'safe',
-      status: 'resolved',
-      description: 'Scheduled security check completed. No anomalies detected. Area secure.',
-      detections: ['Normal activity', 'Authorized personnel only'],
-      duration: '5 minutes',
-      assignedTo: 'Security Team A',
-      priority: 'low'
-    },
-    {
-      id: 4,
-      title: 'Package Delivery - Loading Dock',
-      date: '2025-11-08',
-      time: '09:45:00',
-      location: 'Loading Dock',
-      cameraId: 'Camera 14',
-      threatLevel: 'safe',
-      status: 'resolved',
-      description: 'Authorized delivery vehicle arrived. Package inspected and cleared. No security concerns.',
-      detections: ['Vehicle detected', 'Package scan complete', 'Authorized personnel'],
-      duration: '12 minutes',
-      assignedTo: 'Security Team C',
-      priority: 'low'
-    },
-    {
-      id: 5,
-      title: 'Motion After Hours - Office Wing',
-      date: '2025-11-07',
-      time: '22:30:00',
-      location: 'Office Wing',
-      cameraId: 'Camera 11',
-      threatLevel: 'warning',
-      status: 'under-review',
-      description: 'Motion detected in office area during non-business hours. Investigating if authorized staff or maintenance.',
-      detections: ['Motion detected', 'After hours activity', 'Light source detected'],
-      duration: '25 minutes',
-      assignedTo: 'Security Team B',
-      priority: 'medium'
-    },
-    {
-      id: 6,
-      title: 'Fire Alarm Test - Multiple Locations',
-      date: '2025-11-07',
-      time: '15:00:00',
-      location: 'Building-wide',
-      cameraId: 'Multiple',
-      threatLevel: 'safe',
-      status: 'resolved',
-      description: 'Scheduled fire alarm system test conducted successfully. All personnel evacuated orderly. System functioning properly.',
-      detections: ['Alarm triggered', 'Evacuation procedures', 'All clear'],
-      duration: '45 minutes',
-      assignedTo: 'Security Team A',
-      priority: 'low'
-    },
-    {
-      id: 7,
-      title: 'Tailgating Incident - Main Entrance',
-      date: '2025-11-07',
-      time: '08:15:00',
-      location: 'Main Entrance',
-      cameraId: 'Camera 1',
-      threatLevel: 'warning',
-      status: 'resolved',
-      description: 'Individual attempted to enter without badge by following authorized person. Security intervened and verified credentials.',
-      detections: ['Tailgating detected', 'Access control breach', 'Security response'],
-      duration: '3 minutes',
-      assignedTo: 'Security Team A',
-      priority: 'high'
-    },
-    {
-      id: 8,
-      title: 'Crowd Detected - Cafeteria',
-      date: '2025-11-07',
-      time: '12:30:00',
-      location: 'Cafeteria',
-      cameraId: 'Camera 13',
-      threatLevel: 'safe',
-      status: 'resolved',
-      description: 'Large gathering during lunch hour. Normal activity, no security concerns.',
-      detections: ['Multiple persons', 'Normal behavior', 'Authorized area'],
-      duration: '60 minutes',
-      assignedTo: 'Security Team C',
-      priority: 'low'
-    }
-    ])
   }
 
   const filteredReports = reports.filter(report => {

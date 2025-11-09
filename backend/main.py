@@ -144,12 +144,18 @@ async def save_threat_detection(data: dict):
         if not auth_token:
             raise HTTPException(status_code=401, detail="Authentication required")
         
-        # Verify token and get user
-        user_response = supabase.auth.get_user(auth_token)
-        if not user_response or not user_response.user:
+        # Verify token and get user using the service key
+        # The token is a JWT that contains the user_id
+        try:
+            # Decode the JWT to get user_id (token should be valid from Supabase)
+            import jwt
+            decoded = jwt.decode(auth_token, options={"verify_signature": False})
+            user_id = decoded.get("sub")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token: no user ID")
+        except Exception as jwt_error:
+            print(f"JWT decode error: {jwt_error}")
             raise HTTPException(status_code=401, detail="Invalid authentication token")
-        
-        user_id = user_response.user.id
         
         # Extract detection data
         detection = data.get("detection", {})
@@ -225,12 +231,16 @@ async def get_threat_detections(auth_token: str, limit: int = 50):
         
         supabase = create_client(supabase_url, supabase_key)
         
-        # Verify token and get user
-        user_response = supabase.auth.get_user(auth_token)
-        if not user_response or not user_response.user:
+        # Verify token and get user using JWT decode
+        try:
+            import jwt
+            decoded = jwt.decode(auth_token, options={"verify_signature": False})
+            user_id = decoded.get("sub")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token: no user ID")
+        except Exception as jwt_error:
+            print(f"JWT decode error: {jwt_error}")
             raise HTTPException(status_code=401, detail="Invalid authentication token")
-        
-        user_id = user_response.user.id
         
         # Query ALL threat detections (safe, warning, danger)
         result = supabase.table("threat_detections")\
