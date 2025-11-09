@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { sendThreatEmail, isEmailConfigured } from '../services/emailService'
 import '../styles/LiveCamera.css'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -11,18 +12,66 @@ function LiveCamera() {
   const [error, setError] = useState(null)
   const [threatLevel, setThreatLevel] = useState('safe')
   const [detections, setDetections] = useState([]) // Local state for all detections
-  const [threatHistory, setThreatHistory] = useState([]) // Database history for warnings/danger
-  const [isRecording, setIsRecording] = useState(false)
+  const [threatHistory, setThreatHistory] = useState([]) // Database history
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [lastAnalysis, setLastAnalysis] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [apiStats, setApiStats] = useState({ total_calls: 0, mode: 'direct_gemini_analysis' })
+  const [geminiMetrics, setGeminiMetrics] = useState({
+    objectsDetected: [],
+    peopleCount: 0,
+    recommendedAction: 'Monitoring...',
+    averageConfidence: 0
+  })
   const analysisIntervalRef = useRef(null)
 
-  // Load threat history on component mount
+  // Load saved detections from localStorage on mount
+  useEffect(() => {
+    const savedDetections = localStorage.getItem('liveDetections')
+    if (savedDetections) {
+      try {
+        const parsed = JSON.parse(savedDetections)
+        setDetections(parsed)
+      } catch (err) {
+        console.error('Error loading saved detections:', err)
+      }
+    }
+  }, [])
+
+  // Save detections to localStorage whenever they change
+  useEffect(() => {
+    if (detections.length > 0) {
+      localStorage.setItem('liveDetections', JSON.stringify(detections))
+    }
+  }, [detections])
+
+  // Load threat history and API stats on component mount
   useEffect(() => {
     loadThreatHistory()
+    loadApiStats()
+    
+    // Update API stats every 30 seconds
+    const statsInterval = setInterval(loadApiStats, 30000)
+    return () => clearInterval(statsInterval)
   }, [])
+
+  const loadApiStats = async () => {
+    try {
+      const response = await fetch(`${API_URL}/health`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.api_usage) {
+          setApiStats({
+            total_calls: result.api_usage.total_calls || 0,
+            mode: result.api_usage.mode || 'direct_gemini_analysis'
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Error loading API stats:', err)
+    }
+  }
 
   // Real-time threat detection using Gemini API
   useEffect(() => {
@@ -72,9 +121,8 @@ function LiveCamera() {
 
   const saveThreatToDatabase = async (analysis) => {
     try {
-      // Only save warnings and danger with high confidence
-      if ((analysis.threat_level === 'warning' || analysis.threat_level === 'danger') && 
-          analysis.confidence >= 0.7) {
+      // Save ALL detections (safe, warning, danger) with confidence >= 0.5
+      if (analysis.confidence >= 0.5) {
         
         // Get current session
         const { data: { session } } = await supabase.auth.getSession()
@@ -84,6 +132,7 @@ function LiveCamera() {
           return
         }
 
+        // The analysis now includes image_data captured by Gemini
         const response = await fetch(`${API_URL}/api/threat-detections`, {
           method: 'POST',
           headers: {
@@ -92,23 +141,25 @@ function LiveCamera() {
           body: JSON.stringify({
             auth_token: session.access_token,
             camera_name: 'Live Camera',
-            detection: analysis,
-            image_url: null // Could add image upload later
+            detection: analysis,  // This includes image_data from Gemini
+            image_url: null  // Optional: for external storage URLs
           })
         })
 
         if (response.ok) {
           const result = await response.json()
-          console.log('Threat saved to database:', result)
+          console.log('✅ Detection saved to database:', result)
           
           // Reload history to show new detection
           await loadThreatHistory()
         }
       }
     } catch (err) {
-      console.error('Error saving threat to database:', err)
+      console.error('Error saving detection to database:', err)
     }
   }
+
+
 
   const captureFrame = () => {
     if (!videoRef.current) return null
@@ -170,8 +221,30 @@ function LiveCamera() {
 
         setDetections(prev => [newDetection, ...prev].slice(0, 10))
 
-        // Save to database if it's a significant threat
+        // Update Gemini metrics from API response
+        setGeminiMetrics({
+          objectsDetected: analysis.objects_detected || [],
+          peopleCount: analysis.people_count || 0,
+          recommendedAction: analysis.recommended_action || 'Continue monitoring',
+          averageConfidence: analysis.confidence || 0
+        })
+
+        // Save ALL detections to database (snapshot already captured by Gemini)
         await saveThreatToDatabase(analysis)
+
+        // Send email notification for warning and danger threats
+        if (analysis.threat_level === 'warning' || analysis.threat_level === 'danger') {
+          if (isEmailConfigured()) {
+            const emailResult = await sendThreatEmail(analysis)
+            if (emailResult.success) {
+              console.log('📧 Email notification sent for threat:', analysis.threat_level)
+            } else {
+              console.error('Failed to send email notification:', emailResult.error)
+            }
+          } else {
+            console.warn('Email notifications not configured. Set VITE_EMAILJS_* variables in .env')
+          }
+        }
 
         // Log to console for debugging
         console.log('Threat Analysis:', analysis)
@@ -219,15 +292,10 @@ function LiveCamera() {
       tracks.forEach(track => track.stop())
       videoRef.current.srcObject = null
       setIsStreaming(false)
-      setIsRecording(false)
     }
   }
 
-  const toggleRecording = () => {
-    if (!isStreaming) return
-    // TODO: Implement actual recording logic
-    setIsRecording(!isRecording)
-  }
+
 
   const takeSnapshot = () => {
     if (!isStreaming || !videoRef.current) return
@@ -296,8 +364,8 @@ function LiveCamera() {
                 <div className="video-overlay">
                   <div className="overlay-top">
                     <div className="recording-indicator">
-                      <span className={`rec-dot ${isRecording ? 'recording' : ''}`}></span>
-                      <span>{isRecording ? 'RECORDING' : 'LIVE'}</span>
+                      <span className="rec-dot"></span>
+                      <span>LIVE</span>
                     </div>
                     <div className="timestamp">
                       {new Date().toLocaleString()}
@@ -337,15 +405,6 @@ function LiveCamera() {
                   <span>⏹</span> Stop Camera
                 </button>
               )}
-              
-              <button 
-                className={`btn-control ${isRecording ? 'recording' : ''}`}
-                onClick={toggleRecording}
-                disabled={!isStreaming}
-              >
-                <span>{isRecording ? '⏹' : '🔴'}</span>
-                {isRecording ? 'Stop Recording' : 'Start Recording'}
-              </button>
               
               <button 
                 className="btn-control"
@@ -393,6 +452,30 @@ function LiveCamera() {
               <div className="info-item">
                 <span className="info-label">Source:</span>
                 <span className="info-value">Webcam</span>
+              </div>
+            </div>
+            
+            {/* Gemini AI Metrics */}
+            <div className="compact-stats">
+              <div className="compact-stat-item">
+                <span className="compact-stat-icon">👁️</span>
+                <span className="compact-stat-value">{geminiMetrics.objectsDetected.length > 0 ? geminiMetrics.objectsDetected.join(', ') : 'None'}</span>
+                <span className="compact-stat-label">Objects Detected</span>
+              </div>
+              <div className="compact-stat-item">
+                <span className="compact-stat-icon">👥</span>
+                <span className="compact-stat-value">{geminiMetrics.peopleCount}</span>
+                <span className="compact-stat-label">People Count</span>
+              </div>
+              <div className="compact-stat-item">
+                <span className="compact-stat-icon">⚡</span>
+                <span className="compact-stat-value">{geminiMetrics.recommendedAction}</span>
+                <span className="compact-stat-label">Recommended Action</span>
+              </div>
+              <div className="compact-stat-item">
+                <span className="compact-stat-icon">🎯</span>
+                <span className="compact-stat-value">{(geminiMetrics.averageConfidence * 100).toFixed(0)}%</span>
+                <span className="compact-stat-label">Confidence</span>
               </div>
             </div>
           </div>

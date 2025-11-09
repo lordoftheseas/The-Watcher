@@ -54,12 +54,12 @@ function Landing() {
           {/* Stats */}
           <div className="stats">
             <div className="stat-item">
-              <div className="stat-value">99.9%</div>
+              <div className="stat-value">High</div>
               <div className="stat-label">Accuracy</div>
             </div>
             <div className="stat-divider"></div>
             <div className="stat-item">
-              <div className="stat-value">&lt;0.5s</div>
+              <div className="stat-value">Fast</div>
               <div className="stat-label">Response Time</div>
             </div>
             <div className="stat-divider"></div>
@@ -80,12 +80,12 @@ function Landing() {
               <p>Real-time AI-powered threat detection and analysis</p>
               <div className="info-card-stats">
                 <div className="info-stat">
-                  <span className="info-stat-value">1000+</span>
-                  <span className="info-stat-label">Organizations Protected</span>
+                  <span className="info-stat-value">1</span>
+                  <span className="info-stat-label">Person Protected</span>
                 </div>
                 <div className="info-stat">
-                  <span className="info-stat-value">50M+</span>
-                  <span className="info-stat-label">Threats Prevented</span>
+                  <span className="info-stat-value">1</span>
+                  <span className="info-stat-label">Threat Prevented</span>
                 </div>
               </div>
             </div>

@@ -1,13 +1,88 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import '../styles/Reports.css'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function Reports() {
   const [selectedReport, setSelectedReport] = useState(null)
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterThreat, setFilterThreat] = useState('all')
+  const [reports, setReports] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Hardcoded report data
-  const [reports] = useState([
+  // Load reports from database
+  useEffect(() => {
+    loadReports()
+  }, [])
+
+  const loadReports = async () => {
+    try {
+      setIsLoading(true)
+      
+      // Get current session
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        console.log('No session found, showing demo data')
+        loadDemoReports()
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/threat-detections?auth_token=${session.access_token}&limit=100`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to load reports')
+      }
+
+      const result = await response.json()
+      
+      if (result.success && result.detections) {
+        // Transform database detections to report format
+        const transformedReports = result.detections.map((detection, index) => {
+          // Determine icon based on threat level
+          let icon = '✓'
+          if (detection.threat_level === 'danger') icon = '🚨'
+          else if (detection.threat_level === 'warning') icon = '⚠️'
+          
+          return {
+            id: detection.id,
+            title: `${icon} ${detection.description.substring(0, 50)}...`,
+            date: new Date(detection.timestamp).toISOString().split('T')[0],
+            time: new Date(detection.timestamp).toLocaleTimeString(),
+            location: detection.camera_name || 'Live Camera',
+            cameraId: detection.camera_name || 'Live Camera',
+            threatLevel: detection.threat_level,
+            status: detection.reviewed ? 'resolved' : 'under-review',
+            description: detection.description,
+            detections: Array.isArray(detection.details) ? detection.details : [],
+            duration: 'N/A',
+            assignedTo: 'Security Team',
+            priority: detection.threat_level === 'danger' ? 'high' : 
+                     detection.threat_level === 'warning' ? 'medium' : 'low',
+            confidence: detection.confidence,
+            reportId: detection.report_id,
+            timestamp: detection.timestamp,
+            imageData: detection.image_data,  // Add image data
+            imageUrl: detection.image_url      // Keep image URL if using external storage
+          }
+        })
+        
+        setReports(transformedReports)
+      } else {
+        loadDemoReports()
+      }
+    } catch (err) {
+      console.error('Error loading reports:', err)
+      loadDemoReports()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadDemoReports = () => {
+    // Fallback to demo data
+    setReports([
     {
       id: 1,
       title: 'Suspicious Activity - Main Entrance',
@@ -128,7 +203,8 @@ function Reports() {
       assignedTo: 'Security Team C',
       priority: 'low'
     }
-  ])
+    ])
+  }
 
   const filteredReports = reports.filter(report => {
     const statusMatch = filterStatus === 'all' || report.status === filterStatus
@@ -168,6 +244,12 @@ function Reports() {
 
   return (
     <div className="reports-container">
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="loading-spinner">Loading reports...</div>
+        </div>
+      )}
+      
       {/* Stats Bar */}
       <div className="reports-stats">
         <div className="stat-card">
@@ -309,7 +391,9 @@ function Reports() {
                   <div className="detail-grid">
                     <div className="detail-item">
                       <span className="detail-label">Report ID:</span>
-                      <span className="detail-value">#{selectedReport.id.toString().padStart(6, '0')}</span>
+                      <span className="detail-value">
+                        {selectedReport.reportId || `#${selectedReport.id.toString().padStart(6, '0')}`}
+                      </span>
                     </div>
                     <div className="detail-item">
                       <span className="detail-label">Date:</span>
@@ -319,6 +403,12 @@ function Reports() {
                       <span className="detail-label">Time:</span>
                       <span className="detail-value">{selectedReport.time}</span>
                     </div>
+                    {selectedReport.confidence && (
+                      <div className="detail-item">
+                        <span className="detail-label">Confidence:</span>
+                        <span className="detail-value">{Math.round(selectedReport.confidence * 100)}%</span>
+                      </div>
+                    )}
                     <div className="detail-item">
                       <span className="detail-label">Duration:</span>
                       <span className="detail-value">{selectedReport.duration}</span>
@@ -377,6 +467,33 @@ function Reports() {
                     ))}
                   </div>
                 </div>
+
+                {/* Show captured image if available */}
+                {(selectedReport.imageData || selectedReport.imageUrl) && (
+                  <div className="detail-section">
+                    <h3>Captured Frame at Detection</h3>
+                    <div className="image-evidence">
+                      <img 
+                        src={selectedReport.imageData || selectedReport.imageUrl} 
+                        alt="Threat detection frame"
+                        style={{
+                          maxWidth: '100%',
+                          borderRadius: '8px',
+                          border: '2px solid #333',
+                          boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                        }}
+                      />
+                      <p style={{ 
+                        fontSize: '0.9rem', 
+                        color: '#888', 
+                        marginTop: '8px',
+                        textAlign: 'center'
+                      }}>
+                        📸 Frame captured at {selectedReport.time} on {selectedReport.date}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="detail-section">
                   <h3>Video Evidence</h3>
