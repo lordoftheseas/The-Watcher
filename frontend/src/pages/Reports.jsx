@@ -60,7 +60,8 @@ function Reports() {
           confidence: report.confidence,
           reportId: report.id,
           timestamp: report.timestamp,
-          imageData: report.imageData,
+          snapshotImage: report.snapshotImage, // Captured snapshot
+          imageData: report.imageData, // Fallback
           objectsDetected: report.objectsDetected,
           peopleCount: report.peopleCount,
           recommendedAction: report.recommendedAction
@@ -406,14 +407,14 @@ function Reports() {
                   </div>
                 </div>
 
-                {/* Show captured image if available */}
-                {(selectedReport.imageData || selectedReport.imageUrl) && (
+                {/* Show captured snapshot if available */}
+                {(selectedReport.snapshotImage || selectedReport.imageData || selectedReport.imageUrl) && (
                   <div className="detail-section">
-                    <h3>Captured Frame at Detection</h3>
+                    <h3>Captured Snapshot at Detection</h3>
                     <div className="image-evidence">
                       <img 
-                        src={selectedReport.imageData || selectedReport.imageUrl} 
-                        alt="Threat detection frame"
+                        src={selectedReport.snapshotImage || selectedReport.imageData || selectedReport.imageUrl} 
+                        alt="Threat detection snapshot"
                         style={{
                           maxWidth: '100%',
                           borderRadius: '8px',

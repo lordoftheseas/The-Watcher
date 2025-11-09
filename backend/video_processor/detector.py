@@ -96,7 +96,7 @@ def analyze_frame_for_threats(frame):
         # Using gemini-2.0-flash-exp for fast, accurate image analysis
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
         
-        # Comprehensive threat detection prompt with JSON response requirement
+        # Comprehensive threat detection prompt with TWO-PART response
         prompt = """You are an advanced security surveillance AI. Analyze this image for potential security threats or suspicious activities.
 
 Look for:
@@ -111,11 +111,19 @@ Look for:
 9. Abandoned suspicious packages or bags
 10. Any other security concerns
 
-CRITICAL: Respond ONLY with valid JSON in this EXACT format (no markdown, no code blocks):
+CRITICAL: Respond with TWO sections separated by "---REPORT---":
+
+SECTION 1 (Live Display Description):
+A simple, human-readable sentence describing what you see. This will be shown to users in real-time.
+Example: "Normal office environment with 2 people working at desks"
+
+---REPORT---
+
+SECTION 2 (Report Data - JSON):
 {{
     "threat_detected": true,
     "threat_level": "warning",
-    "description": "Brief description of what you see",
+    "report_description": "Detailed technical description for security report",
     "confidence": 0.85,
     "details": ["specific detail 1", "specific detail 2", "specific detail 3"],
     "objects_detected": ["object1", "object2"],
@@ -123,61 +131,79 @@ CRITICAL: Respond ONLY with valid JSON in this EXACT format (no markdown, no cod
     "recommended_action": "Brief action recommendation"
 }}
 
-Rules:
-- threat_level: "safe" (no threats), "warning" (suspicious but not immediate), "danger" (immediate threat)
-- confidence: Your confidence in the assessment (0.0 to 1.0)
-- details: Array of 3-5 specific observations
-- objects_detected: Array of notable objects seen in the scene
-- people_count: Number of people visible
-- recommended_action: Brief action suggestion
-- Be conservative - don't raise false alarms for normal activities
-- Focus on security-relevant observations
-- Return ONLY valid JSON, no other text"""
+Format Rules:
+- SECTION 1: Simple plain text sentence (no JSON, no formatting)
+- Then write exactly: ---REPORT---
+- SECTION 2: Valid JSON only (no markdown, no code blocks)
+- threat_level: "safe", "warning", or "danger"
+- confidence: 0.0 to 1.0
+- details: 3-5 specific observations
+- objects_detected: Notable objects in scene
+- people_count: Number of people
+- report_description: Detailed description for security reports
+- Be conservative with threat levels"""
         
         # Generate response
         response = model.generate_content([prompt, pil_image])
         
-        # Parse response
+        # Parse response - expecting TWO sections
         response_text = response.text.strip()
         
-        # Try to extract JSON from the response
         import json
         
-        # Remove markdown code blocks if present
-        if "```json" in response_text:
-            response_text = response_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in response_text:
-            response_text = response_text.split("```")[1].split("```")[0].strip()
+        # Split response into display description and report data
+        if "---REPORT---" in response_text:
+            parts = response_text.split("---REPORT---")
+            display_description = parts[0].strip()
+            report_json_text = parts[1].strip()
+        else:
+            # Fallback if format not followed
+            display_description = "Analysis completed"
+            report_json_text = response_text
+        
+        # Clean the JSON part
+        if "```json" in report_json_text:
+            report_json_text = report_json_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in report_json_text:
+            report_json_text = report_json_text.split("```")[1].split("```")[0].strip()
         
         try:
-            result = json.loads(response_text)
+            result = json.loads(report_json_text)
         except json.JSONDecodeError as e:
-            # If JSON parsing fails, return a safe default with the raw text
+            # If JSON parsing fails, return a safe default
             print(f"⚠️ JSON parsing failed: {e}")
             print(f"   Raw response: {response_text[:200]}")
             return {
                 "threat_detected": False,
                 "threat_level": "safe",
-                "description": response_text[:200],  # First 200 chars
+                "description": display_description if display_description else response_text[:200],
+                "report_description": response_text[:200],
                 "confidence": 0.5,
                 "details": ["Analysis completed but format unexpected"],
-                "image_data": image_data
+                "image_data": image_data,
+                "objects_detected": [],
+                "people_count": 0,
+                "recommended_action": "Monitor the situation"
             }
         
         # Validate and normalize the result
         result.setdefault("threat_detected", False)
         result.setdefault("threat_level", "safe")
-        result.setdefault("description", "No description provided")
+        result.setdefault("report_description", "No description provided")
         result.setdefault("confidence", 0.0)
         result.setdefault("details", [])
         result.setdefault("objects_detected", [])
         result.setdefault("people_count", 0)
         result.setdefault("recommended_action", "Monitor the situation")
         
+        # Add the display description (plain text for live camera)
+        result["description"] = display_description
+        
         # Include the captured frame with all detections
         result["image_data"] = image_data
         
         print(f"✅ AI Analysis complete: {result['threat_level']} (confidence: {result['confidence']:.2f})")
+        print(f"   Display: {display_description[:50]}...")
         print(f"   Objects: {result.get('objects_detected', [])}")
         print(f"   People: {result.get('people_count', 0)}")
         print(f"   Action: {result.get('recommended_action', 'N/A')}")

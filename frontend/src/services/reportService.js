@@ -4,7 +4,7 @@
  * No database dependency - everything stored in localStorage
  */
 
-export const generateReport = (detection) => {
+export const generateReport = (detection, snapshotImage = null) => {
   const report = {
     id: `report-${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -13,7 +13,9 @@ export const generateReport = (detection) => {
     
     // Threat Information
     threatLevel: detection.threat_level || 'safe',
-    description: detection.description || 'No description available',
+    // Use report_description for detailed report, description for display
+    description: detection.report_description || detection.description || 'No description available',
+    displayDescription: detection.description || 'No description available',
     confidence: detection.confidence || 0,
     
     // Details
@@ -26,8 +28,8 @@ export const generateReport = (detection) => {
     cameraName: 'Live Camera',
     cameraId: 'live-camera-1',
     
-    // Image data
-    imageData: detection.image_data || null,
+    // Image data - use snapshot if provided, otherwise use detection image
+    snapshotImage: snapshotImage || detection.image_data || null,
     
     // Status
     status: 'active',
@@ -119,7 +121,8 @@ export const getReportStats = () => {
 export const generateDummyReport = () => {
   const dummyDetection = {
     threat_level: 'warning',
-    description: 'Suspicious activity detected: Person lingering near entrance after business hours',
+    description: 'Suspicious activity near entrance',
+    report_description: 'Suspicious activity detected: Individual lingering near main entrance after business hours with large backpack. Subject observed testing door handles. Vehicle with obscured license plate parked nearby. Potential security breach attempt.',
     confidence: 0.87,
     objects_detected: ['person', 'door', 'bag', 'vehicle'],
     people_count: 1,

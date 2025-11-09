@@ -205,12 +205,25 @@ function LiveCamera() {
         })
 
         // Generate and save report LOCALLY for warning/danger threats
+        // Capture snapshot at the moment of threat detection
         if (analysis.threat_level === 'warning' || analysis.threat_level === 'danger') {
-          const report = generateReport(analysis)
+          console.log('📸 Capturing snapshot for report...')
+          
+          // Capture the current frame as snapshot
+          const snapshotCanvas = captureFrame()
+          let snapshotImage = null
+          
+          if (snapshotCanvas) {
+            // Convert canvas to base64 image
+            snapshotImage = snapshotCanvas.toDataURL('image/jpeg', 0.85)
+          }
+          
+          // Generate report with snapshot
+          const report = generateReport(analysis, snapshotImage)
           const saveResult = saveReportToLocal(report)
           
           if (saveResult.success) {
-            console.log('✅ Report generated and saved locally:', report.id)
+            console.log('✅ Report generated with snapshot and saved locally:', report.id)
             setDetections(prev => [{
               id: Date.now() + 1,
               text: `📄 Report generated: ${report.id}`,
