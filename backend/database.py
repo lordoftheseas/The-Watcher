@@ -1,50 +1,60 @@
 from dotenv import load_dotenv
 import os
+from typing import Optional, List
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from datetime import datetime
+from auth import router as auth_router
+
 load_dotenv()
 
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
-
-CONNECTION_URI = f"postgresql://postgres.ayvkfoagfgnbwglrgznq:[{DATABASE_PASSWORD}]@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
-CONNECTION_URI = f"postgresql://postgres:[{DATABASE_PASSWORD}]@db.ayvkfoagfgnbwglrgznq.supabase.co:5432/postgres"
-CONNECTION_URI = f"postgresql://postgres.ayvkfoagfgnbwglrgznq:[{DATABASE_PASSWORD}]@aws-1-us-east-2.pooler.supabase.com:5432/postgres"
-
-from sqlmodel import SQLModel, Field, select
-from typing import Optional, List
-from sqlmodal import create_engine, Session
-from fastapi import FASTAPI
-from contextlib import asynccontextmanager
-
-class Item(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    price: float
-    is_offer: bool = False
-
-engine = create_engine(CONNECTION_URI, echo=True)
-
-def create_db_and_taken():
-    SQLModel.metadata.create_all(engine)
+# Note: Database tables are created via schema.sql in Supabase SQL Editor
+# See DATABASE_SETUP.md for instructions
 
 @asynccontextmanager
-def lifespan(app: FASTAPI):
-    create_db_and_taken()
+async def lifespan(app: FastAPI):
+    print("✅ Watcher API started successfully")
+    print("📝 Database tables: Run backend/schema.sql in Supabase SQL Editor")
+    print("🔗 API Docs: http://localhost:8000/docs")
     yield
+    print("� Shutting down Watcher API")
 
-app = FASTAPI(lifespan=lifespan)
+app = FastAPI(
+    title="Watcher API",
+    description="Real-time crime detection monitoring system",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
-@app.post("/items")
+# CORS Middleware - Allow frontend to make requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        os.getenv("FRONTEND_URL", "http://localhost:3000")
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def create_item(item: Item):
-    with Session(engine) as session:
-        session.add()
-        session.commit()
-        session.refresh(item)
-        return item
+# Include auth router
+app.include_router(auth_router)
 
-@app.get("/items/", response_model=List[Item])
+# Root endpoint
+@app.get("/")
+async def root():
+    return {
+        "message": "Watcher API - Real-time Crime Detection System",
+        "status": "running",
+        "docs": "/docs",
+        "version": "1.0.0"
+    }
 
-def read_items():
-    with Session(engine) as session:
-        items = session.exec(select(Item)).all()
-        return items
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
 

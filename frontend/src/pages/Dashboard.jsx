@@ -1,15 +1,85 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom'
+import { authHelpers } from '../lib/supabase'
 import '../styles/Dashboard.css'
 
 function Dashboard() {
   const navigate = useNavigate()
   const location = useLocation()
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  const handleLogout = () => {
-    // TODO: Implement actual logout logic
-    navigate('/')
+  useEffect(() => {
+    // Get current user on component mount
+    const fetchUser = async () => {
+      try {
+        const { user: currentUser, error } = await authHelpers.getCurrentUser()
+        if (error) {
+          console.error('Error fetching user:', error)
+          navigate('/login')
+          return
+        }
+        if (!currentUser) {
+          navigate('/login')
+          return
+        }
+        setUser(currentUser)
+      } catch (err) {
+        console.error('Failed to fetch user:', err)
+        navigate('/login')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUser()
+
+    // Listen for auth state changes
+    const { data: { subscription } } = authHelpers.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        navigate('/login')
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user)
+      }
+    })
+
+    return () => {
+      subscription?.unsubscribe()
+    }
+  }, [navigate])
+
+  const handleLogout = async () => {
+    try {
+      await authHelpers.signOut()
+      navigate('/')
+    } catch (err) {
+      console.error('Logout error:', err)
+    }
+  }
+
+  const getUserInitials = () => {
+    if (!user) return 'U'
+    const name = user.user_metadata?.full_name || user.email
+    return name.charAt(0).toUpperCase()
+  }
+
+  const getUserName = () => {
+    if (!user) return 'User Name'
+    return user.user_metadata?.full_name || user.email.split('@')[0]
+  }
+
+  const getUserEmail = () => {
+    if (!user) return 'user@example.com'
+    return user.email
+  }
+
+  if (loading) {
+    return (
+      <div className="dashboard-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div>Loading...</div>
+      </div>
+    )
   }
 
   const menuItems = [
@@ -70,11 +140,11 @@ function Dashboard() {
 
         <div className="sidebar-footer">
           <div className="user-info">
-            <div className="user-avatar">U</div>
+            <div className="user-avatar">{getUserInitials()}</div>
             {isSidebarOpen && (
               <div className="user-details">
-                <span className="user-name">User Name</span>
-                <span className="user-email">user@example.com</span>
+                <span className="user-name">{getUserName()}</span>
+                <span className="user-email">{getUserEmail()}</span>
               </div>
             )}
           </div>
