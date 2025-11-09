@@ -19,7 +19,7 @@ def send_test_email():
     """Send a test threat alert email via EmailJS"""
     
     # EmailJS Configuration - Update these with your actual values
-    SERVICE_ID = "service_6jraqub"  # Your EmailJS service ID
+    SERVICE_ID = "service_epen5p2"  # Your EmailJS service ID
     TEMPLATE_ID = "template_5rdmes5"  # Your EmailJS template ID
     PUBLIC_KEY = "sLi9hafvYwQVm2rat"  # Your EmailJS public key
     

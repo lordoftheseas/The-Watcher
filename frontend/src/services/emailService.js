@@ -29,6 +29,14 @@ export const sendThreatEmail = async (threatData) => {
   }
 
   try {
+    console.log('📧 Raw threat data received:', threatData)
+    
+    // Validate threat data
+    if (!threatData || typeof threatData !== 'object') {
+      console.error('❌ Invalid threat data:', threatData)
+      return { success: false, error: 'Invalid threat data format' }
+    }
+
     // Format the threat level with appropriate emoji
     const threatEmoji = {
       safe: '✅',
@@ -36,21 +44,37 @@ export const sendThreatEmail = async (threatData) => {
       danger: '🚨'
     }
 
+    // Handle both array and string for details
+    let detailsText = 'No additional details'
+    if (Array.isArray(threatData.details)) {
+      detailsText = threatData.details.join('\n• ')
+    } else if (typeof threatData.details === 'string') {
+      detailsText = threatData.details
+    }
+
+    // Handle both array and string for objects_detected
+    let objectsText = 'None'
+    if (Array.isArray(threatData.objects_detected)) {
+      objectsText = threatData.objects_detected.join(', ')
+    } else if (typeof threatData.objects_detected === 'string') {
+      objectsText = threatData.objects_detected
+    }
+
     // Prepare email template parameters
     const templateParams = {
-      threat_level: threatData.threat_level?.toUpperCase() || 'UNKNOWN',
+      threat_level: (threatData.threat_level || 'UNKNOWN').toUpperCase(),
       threat_emoji: threatEmoji[threatData.threat_level] || '❓',
       description: threatData.description || 'No description available',
-      confidence: `${(threatData.confidence * 100).toFixed(1)}%`,
-      objects_detected: threatData.objects_detected?.join(', ') || 'None',
-      people_count: threatData.people_count || 0,
+      confidence: `${((threatData.confidence || 0) * 100).toFixed(1)}%`,
+      objects_detected: objectsText,
+      people_count: String(threatData.people_count || 0),
       recommended_action: threatData.recommended_action || 'Continue monitoring',
-      details: threatData.details?.join('\n• ') || 'No additional details',
+      details: detailsText,
       timestamp: new Date().toLocaleString(),
       camera_name: 'Live Camera'
     }
 
-    console.log('📧 Sending threat email notification...', templateParams)
+    console.log('📧 Formatted email parameters:', templateParams)
 
     // Send email using EmailJS
     const response = await emailjs.send(
@@ -64,7 +88,11 @@ export const sendThreatEmail = async (threatData) => {
 
   } catch (error) {
     console.error('❌ Failed to send email:', error)
-    return { success: false, error: error.message }
+    return { 
+      success: false, 
+      error: error?.text || error?.message || 'Unknown error occurred',
+      details: error
+    }
   }
 }
 

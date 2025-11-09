@@ -94,7 +94,7 @@ def analyze_frame_for_threats(frame):
         
         # Initialize Gemini model
         # Using gemini-2.0-flash-exp for fast, accurate image analysis
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
         # Comprehensive threat detection prompt with TWO-PART response
         prompt = """You are an advanced security surveillance AI. Analyze this image for potential security threats or suspicious activities.
